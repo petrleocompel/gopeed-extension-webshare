@@ -1,0 +1,42 @@
+{
+  "name": "webshare",
+  "author": "petrleocompel",
+  "title": "Webshare.cz",
+  "description": "Download webshare.cz files at full premium speed with your Webshare VIP account.",
+  "icon": "icon.png",
+  "version": "0.1.0",
+  "homepage": "https://github.com/petrleocompel/gopeed-extension-webshare",
+  "repository": {
+    "url": "https://github.com/petrleocompel/gopeed-extension-webshare"
+  },
+  "scripts": [
+    {
+      "event": "onResolve",
+      "match": {
+        "urls": ["*://webshare.cz/*", "*://*.webshare.cz/*"]
+      },
+      "entry": "dist/index.js"
+    }
+  ],
+  "settings": [
+    {
+      "name": "webshare_username",
+      "title": "Username",
+      "description": "Your Webshare.cz username or e-mail.",
+      "type": "string"
+    },
+    {
+      "name": "webshare_password",
+      "title": "Password",
+      "description": "Your Webshare.cz password. It is only sent to webshare.cz, hashed the same way the Webshare website does.",
+      "type": "string"
+    },
+    {
+      "name": "force_https",
+      "title": "Use HTTPS download links",
+      "description": "Ask Webshare for HTTPS download links.",
+      "type": "boolean",
+      "value": true
+    }
+  ]
+}
