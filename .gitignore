@@ -1,6 +1,7 @@
 # Credentials for the integration test
 .env
 .env.*
+!.env.example
 
 node_modules/
 *.log

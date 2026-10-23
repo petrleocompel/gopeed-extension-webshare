@@ -49,8 +49,8 @@ task's error message.
 
 ## Known limitations
 
-- Folder links (`/#/folder/...`) are not supported yet; add the files one by
-  one.
+- Folder links (`/#/folder/...` and `/folder/...`) are not supported yet; add
+  the files one by one.
 - Password-protected files are not supported yet.
 - When several downloads are resolved at the same moment without a stored
   session, each may log in separately. This is harmless; the last session is
