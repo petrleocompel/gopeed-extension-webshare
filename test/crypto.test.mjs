@@ -42,6 +42,7 @@ test('sha1: padding boundaries and UTF-8', () => {
   // Reference values from `printf %s <input> | shasum`.
   assert.equal(sha1Hex('a'.repeat(55)), 'c1c8bbdc22796e28c0e15163d20899b65621d65a');
   assert.equal(sha1Hex('a'.repeat(56)), 'c2db330f6083854c99d4b5bfb6e8f29f201be699');
+  assert.equal(sha1Hex('a'.repeat(64)), '0098ba824b5c16427bd7a1122a5a442a25ec644d');
   assert.equal(sha1Hex('příliš žluťoučký kůň'), '7fe96bcfe7b2e391cfba6787057c8e7794b4371e');
 });
 

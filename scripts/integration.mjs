@@ -4,14 +4,17 @@
 //   WEBSHARE_TEST_URL='https://webshare.cz/#/file/<ident>/<name>' npm run integration
 //
 // Reads WEBSHARE_USERNAME / WEBSHARE_PASSWORD (and optionally
-// WEBSHARE_TEST_URL) from the environment or from .env in the repo root.
-// Prints only non-secret facts: never the password, its hashes, the token or
-// the download link.
+// WEBSHARE_TEST_URL, WEBSHARE_SEARCH) from the environment or from .env in the
+// repo root. With WEBSHARE_TEST_URL it calls file_info / file_link directly,
+// then runs the extension's onResolve end to end with a stand-in for the
+// `gopeed` global. Prints only non-secret facts: never the password, its
+// hashes, the token or the download link (only the first label of its host).
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebshareClient } from '../src/webshare.js';
-import { parseIdent } from '../src/url.js';
+import { parseIdent, urlHost } from '../src/url.js';
+import { onResolve } from '../src/resolve.js';
 import { xmlBlocks, xmlText } from '../src/xml.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,6 +42,12 @@ if (!username || !password) {
 }
 
 const client = new WebshareClient({ username, password, fetch: globalThis.fetch });
+
+// Prints what kind of link it is without printing the link.
+function describeLink(link) {
+  const host = urlHost(link) || '';
+  console.log('  link: ' + (/^https:\/\//.test(link) ? 'https' : 'http') + ', host ' + host.split('.')[0] + '.*');
+}
 
 async function step(title, fn) {
   process.stdout.write(title + ' ... ');
@@ -88,7 +97,34 @@ if (testUrl) {
   console.log('  size: ' + info.size + ' bytes');
   console.log('  available: ' + info.available + ', removed: ' + info.removed + ', password: ' + info.passwordProtected);
   const link = await step('file_link', () => client.fileLink(ident, wst, { forceHttps: true }));
-  console.log('  link returned: ' + (typeof link === 'string' && /^https:\/\//.test(link) ? 'yes (https)' : 'yes'));
+  describeLink(link);
+
+  // The whole handler, as Gopeed runs it: settings, storage and logger.
+  const storage = new Map();
+  globalThis.MessageError = class MessageError {
+    constructor(message) {
+      this.message = message;
+    }
+  };
+  globalThis.gopeed = {
+    settings: { webshare_username: username, webshare_password: password, force_https: true },
+    storage: {
+      get: (k) => (storage.has(k) ? storage.get(k) : null),
+      set: (k, v) => void storage.set(k, String(v)),
+      remove: (k) => void storage.delete(k),
+    },
+    logger: {
+      debug: (m) => console.log('  [debug] ' + m),
+      info: (m) => console.log('  [info] ' + m),
+      warn: (m) => console.log('  [warn] ' + m),
+      error: (m) => console.log('  [error] ' + m),
+    },
+  };
+  const ctx = { req: { url: testUrl } };
+  await step('onResolve', () => onResolve(ctx));
+  console.log('  res.name: ' + ctx.res.name);
+  console.log('  res.files[0].size: ' + ctx.res.files[0].size);
+  describeLink(ctx.res.files[0].req.url);
 } else {
   console.log('(set WEBSHARE_TEST_URL to also resolve a file)');
 }

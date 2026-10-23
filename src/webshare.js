@@ -18,6 +18,7 @@ import { md5Hex } from './crypto/md5.js';
 import { sha1Hex } from './crypto/sha1.js';
 import { md5crypt } from './crypto/md5crypt.js';
 import { xmlText } from './xml.js';
+import { urlHost } from './url.js';
 
 export const DEFAULT_API_BASE = 'https://webshare.cz/api/';
 const STORAGE_KEY = 'session';
@@ -31,9 +32,26 @@ export class WebshareError extends Error {
   }
 }
 
+// file_link handed out a link of the anonymous "free." tier although the
+// account has VIP: the session was not accepted as logged in.
+export class FreeLinkError extends WebshareError {
+  constructor() {
+    super('Webshare returned a free download link instead of a VIP one.', 'FREE_LINK');
+    this.name = 'FreeLinkError';
+  }
+}
+
+// Anonymous downloads come from "free.*" hosts. Other hosts are not rejected:
+// only "free." is known to be the anonymous tier.
+export function isFreeLink(link) {
+  const host = urlHost(link);
+  return host !== null && /^free\./.test(host);
+}
+
 // user_data answers this for a missing, expired or otherwise invalid token.
 // Other calls (file_info, file_link) silently treat a bad token as no token,
-// so the session is checked with user_data before it is used.
+// so the session is checked with user_data before it is used, and a free
+// link from file_link is taken as a sign that it was not accepted after all.
 export function isInvalidTokenError(e) {
   return e instanceof WebshareError && (e.code === 'GET_USER_DATA_1' || e.message === 'Access denied.');
 }
@@ -168,6 +186,7 @@ export class WebshareClient {
     });
     const link = xmlText(xml, 'link');
     if (!link) throw new WebshareError('Webshare did not return a download link.');
+    if (isFreeLink(link)) throw new FreeLinkError();
     return link;
   }
 
@@ -210,26 +229,42 @@ export class WebshareClient {
     }
   }
 
-  // Runs fn(wst, user) with a valid session: the stored token when user_data
-  // accepts it, else a fresh login. When the stored token turns out to be
-  // invalid (also inside fn), it logs in again once and retries.
+  // Runs fn(wst, user) with a session that user_data accepts: the stored
+  // token, else a fresh login. It logs in again, once, and reruns everything
+  // (user_data included) when
+  //
+  //   - user_data rejects the stored token, or
+  //   - fn throws a FreeLinkError, with the stored token or a fresh one.
+  //
+  // The token is forgotten in both cases. Any other error, and a failure of
+  // the second run, is thrown to the caller.
   async withSession(fn) {
     const run = async (wst) => fn(wst, await this.userData(wst));
 
     const cached = await this.loadToken();
-    if (cached) {
-      try {
-        return await run(cached);
-      } catch (e) {
-        if (!isInvalidTokenError(e)) throw e;
-        this.log('info', 'Webshare session expired, logging in again.');
-        await this.forgetToken();
-      }
+    const first = cached || (await this.freshLogin());
+    try {
+      return await run(first);
+    } catch (e) {
+      const free = e instanceof FreeLinkError;
+      if (!free && !(cached && isInvalidTokenError(e))) throw e;
+      await this.forgetToken();
+      this.log('info', free ? 'Webshare gave a free download link, logging in again.' : 'Webshare session expired, logging in again.');
     }
 
+    const second = await this.freshLogin();
+    try {
+      return await run(second);
+    } catch (e) {
+      if (e instanceof FreeLinkError) await this.forgetToken();
+      throw e;
+    }
+  }
+
+  async freshLogin() {
     this.log('debug', 'Logging in to Webshare.');
     const wst = await this.login();
     await this.saveToken(wst);
-    return run(wst);
+    return wst;
   }
 }

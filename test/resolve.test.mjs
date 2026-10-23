@@ -18,8 +18,9 @@ const OLD_TOKEN = 'storedToken456';
 const IDENT = '7e31cQ7l44';
 const URL = 'https://webshare.cz/#/file/' + IDENT + '/txt-txt?nojs=true';
 const LINK = 'https://vip.17.dl.wsfiles.cz/' + IDENT + '/secret-part/file.txt';
+const FREE_LINK = 'https://free.3.dl.wsfiles.cz/' + IDENT + '/free-secret/file.txt';
 
-const SECRETS = [PASSWORD, CRYPTED, HASHED, DIGEST, TOKEN, OLD_TOKEN, LINK, 'Wr0ng-S3cret!'];
+const SECRETS = [PASSWORD, CRYPTED, HASHED, DIGEST, TOKEN, OLD_TOKEN, LINK, FREE_LINK, 'free-secret', 'Wr0ng-S3cret!'];
 
 let fake;
 
@@ -49,6 +50,12 @@ function happyRoutes(validTokens = [TOKEN]) {
   fake.route('user_data', (form) => (validTokens.includes(form.wst) ? userData() : fatal('GET_USER_DATA_1', 'Access denied.')));
   fake.route('file_info', () => fileInfo());
   fake.route('file_link', () => ok('<link>' + LINK + '</link>'));
+}
+
+// file_link answers the given links in turn, then keeps answering the last.
+function linkSequence(...links) {
+  let i = 0;
+  fake.route('file_link', () => ok('<link>' + links[Math.min(i++, links.length - 1)] + '</link>'));
 }
 
 function storedSession(username, wst) {
@@ -158,11 +165,22 @@ test('force_https off sends force_https=0', async () => {
   assert.equal(fake.calls.find((c) => c.method === 'file_link').form.force_https, '0');
 });
 
-test('force_https unset (null) defaults to on', async () => {
-  setup({ settings: { force_https: null } });
-  happyRoutes();
-  await resolve();
-  assert.equal(fake.calls.find((c) => c.method === 'file_link').form.force_https, '1');
+test('force_https is on only for true, 1 and "true"', async () => {
+  for (const [value, expected] of [
+    [true, '1'],
+    [1, '1'],
+    ['true', '1'],
+    [false, '0'],
+    [0, '0'],
+    ['false', '0'],
+    ['0', '0'],
+    [null, '0'],
+  ]) {
+    setup({ settings: { force_https: value } });
+    happyRoutes();
+    await resolve();
+    assert.equal(fake.calls.find((c) => c.method === 'file_link').form.force_https, expected, String(value));
+  }
 });
 
 test('www. and en. URLs and the /file/ form resolve the same ident', async () => {
@@ -194,6 +212,15 @@ test('missing credentials', async () => {
 test('a Webshare URL that is not a file', async () => {
   happyRoutes();
   assert.match(await resolveError('https://webshare.cz/#/search/test'), /not a file link/);
+  assert.match(await resolveError('https://webshare.cz/api/file/' + IDENT), /not a file link/);
+  assert.equal(fake.calls.length, 0);
+});
+
+test('folder links get their own message', async () => {
+  happyRoutes();
+  for (const url of ['https://webshare.cz/#/folder/abc123/name', 'https://webshare.cz/folder/abc123']) {
+    assert.match(await resolveError(url), /folder links are not supported yet/);
+  }
   assert.equal(fake.calls.length, 0);
 });
 
@@ -229,8 +256,87 @@ test('file not found', async () => {
 test('removed file', async () => {
   happyRoutes();
   fake.route('file_info', () => fileInfo({ removed: 1, available: 0, reason: 'copyright' }));
-  assert.match(await resolveError(), /this file has been removed \(copyright\)/);
+  assert.equal(await resolveError(), 'Webshare: this file has been removed (copyright).');
   assert.ok(!methods().includes('file_link'));
+
+  fake.calls.length = 0;
+  fake.route('file_info', () => fileInfo({ removed: 1, available: 0 }));
+  assert.equal(await resolveError(), 'Webshare: this file has been removed.');
+});
+
+test('file that is not available but not removed', async () => {
+  happyRoutes();
+  fake.route('file_info', () => fileInfo({ removed: 0, available: 0 }));
+  const message = await resolveError();
+  assert.match(message, /not available for download right now/);
+  assert.doesNotMatch(message, /removed/);
+  assert.ok(!methods().includes('file_link'));
+});
+
+test('a free link from a fresh login: logs in again and gets the VIP link', async () => {
+  happyRoutes();
+  linkSequence(FREE_LINK, LINK);
+  const ctx = await resolve();
+  assert.equal(ctx.res.files[0].req.url, LINK);
+  assert.deepEqual(methods(), [
+    'salt', 'login', 'user_data', 'file_info', 'file_link',
+    'salt', 'login', 'user_data', 'file_info', 'file_link',
+  ]);
+  assert.equal(JSON.parse(fake.storage.map.get('session')).wst, TOKEN);
+  assertNoSecretsLeaked();
+});
+
+test('a free link with the stored token: forgets it, logs in again and gets the VIP link', async () => {
+  setup({ storage: storedSession(USERNAME, OLD_TOKEN) });
+  happyRoutes([OLD_TOKEN, TOKEN]);
+  linkSequence(FREE_LINK, LINK);
+  const ctx = await resolve();
+  assert.equal(ctx.res.files[0].req.url, LINK);
+  assert.deepEqual(methods(), ['user_data', 'file_info', 'file_link', 'salt', 'login', 'user_data', 'file_info', 'file_link']);
+  assert.equal(fake.calls[7].form.wst, TOKEN);
+  assert.equal(JSON.parse(fake.storage.map.get('session')).wst, TOKEN);
+  assertNoSecretsLeaked();
+});
+
+test('a free link twice: error, no third attempt, token forgotten', async () => {
+  setup({ storage: storedSession(USERNAME, OLD_TOKEN) });
+  happyRoutes([OLD_TOKEN, TOKEN]);
+  linkSequence(FREE_LINK);
+  const message = await resolveError();
+  assert.match(message, /^Webshare did not grant a VIP download link\. Check the VIP status/);
+  assert.deepEqual(methods(), ['user_data', 'file_info', 'file_link', 'salt', 'login', 'user_data', 'file_info', 'file_link']);
+  assert.equal(fake.storage.map.has('session'), false);
+  assertNoSecretsLeaked(message);
+});
+
+test('only free. hosts count as free links', async () => {
+  for (const link of ['https://FREE.1.dl.wsfiles.cz/x', 'http://free.wsfiles.cz/x']) {
+    setup();
+    happyRoutes();
+    linkSequence(link);
+    assert.match(await resolveError(), /did not grant a VIP download link/, link);
+  }
+  for (const link of ['https://vip.1.dl.wsfiles.cz/x', 'https://dl.wsfiles.cz/x', 'https://freebie.wsfiles.cz/x', 'https://cdn.example/free.x']) {
+    setup();
+    happyRoutes();
+    linkSequence(link);
+    assert.equal((await resolve()).res.files[0].req.url, link);
+    assert.equal(methods().filter((m) => m === 'file_link').length, 1, link);
+  }
+});
+
+test('unexpected errors are logged, but not shown to the user', async () => {
+  happyRoutes();
+  fake.route('file_info', () => ({
+    status: 200,
+    get text() {
+      throw new RangeError('internal detail wst=' + TOKEN);
+    },
+  }));
+  const message = await resolveError();
+  assert.equal(message, 'Webshare: unexpected error. See the extension log for details.');
+  const logged = fake.logs.find((l) => l.level === 'error');
+  assert.ok(logged && logged.msg.includes('internal detail'), 'the error is logged');
 });
 
 test('password-protected file', async () => {

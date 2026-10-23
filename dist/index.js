@@ -321,6 +321,38 @@
     return m[1] === void 0 ? "" : textOf(m[1]);
   }
 
+  // src/url.js
+  var URL_RE = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/i;
+  var PATH_ROUTE_RE = /^\/(file|folder)\/([A-Za-z0-9]+)(?:\/|$)/;
+  var FRAGMENT_ROUTE_RE = /^\/(file|folder)\/([A-Za-z0-9]+)(?:[/?&#]|$)/;
+  function isWebshareHost(host) {
+    const h = host.toLowerCase();
+    return h === "webshare.cz" || /\.webshare\.cz$/.test(h);
+  }
+  function hostOf(authority) {
+    const at = authority.lastIndexOf("@");
+    const hostPort = at >= 0 ? authority.slice(at + 1) : authority;
+    return hostPort.replace(/:\d*$/, "").replace(/\.$/, "");
+  }
+  function urlHost(url) {
+    const m = URL_RE.exec(String(url || "").trim());
+    if (!m) return null;
+    const scheme = m[1].toLowerCase();
+    if (scheme !== "http" && scheme !== "https") return null;
+    return hostOf(m[2]).toLowerCase();
+  }
+  function parseLink(url) {
+    const m = URL_RE.exec(String(url || "").trim());
+    if (!m) return null;
+    const scheme = m[1].toLowerCase();
+    if (scheme !== "http" && scheme !== "https") return null;
+    if (!isWebshareHost(hostOf(m[2]))) return null;
+    const path = m[3] || "";
+    const fragment = (m[5] || "").replace(/^#!?/, "");
+    const route = PATH_ROUTE_RE.exec(path) || FRAGMENT_ROUTE_RE.exec(fragment);
+    return route ? { type: route[1], ident: route[2] } : null;
+  }
+
   // src/webshare.js
   var DEFAULT_API_BASE = "https://webshare.cz/api/";
   var STORAGE_KEY = "session";
@@ -331,6 +363,16 @@
       this.code = code || "";
     }
   };
+  var FreeLinkError = class extends WebshareError {
+    constructor() {
+      super("Webshare returned a free download link instead of a VIP one.", "FREE_LINK");
+      this.name = "FreeLinkError";
+    }
+  };
+  function isFreeLink(link) {
+    const host = urlHost(link);
+    return host !== null && /^free\./.test(host);
+  }
   function isInvalidTokenError(e) {
     return e instanceof WebshareError && (e.code === "GET_USER_DATA_1" || e.message === "Access denied.");
   }
@@ -452,6 +494,7 @@
       });
       const link = xmlText(xml, "link");
       if (!link) throw new WebshareError("Webshare did not return a download link.");
+      if (isFreeLink(link)) throw new FreeLinkError();
       return link;
     }
     // The stored token is tied to the username, so switching accounts in the
@@ -489,56 +532,42 @@
       } catch (e) {
       }
     }
-    // Runs fn(wst, user) with a valid session: the stored token when user_data
-    // accepts it, else a fresh login. When the stored token turns out to be
-    // invalid (also inside fn), it logs in again once and retries.
+    // Runs fn(wst, user) with a session that user_data accepts: the stored
+    // token, else a fresh login. It logs in again, once, and reruns everything
+    // (user_data included) when
+    //
+    //   - user_data rejects the stored token, or
+    //   - fn throws a FreeLinkError, with the stored token or a fresh one.
+    //
+    // The token is forgotten in both cases. Any other error, and a failure of
+    // the second run, is thrown to the caller.
     async withSession(fn) {
-      const run = async (wst2) => fn(wst2, await this.userData(wst2));
+      const run = async (wst) => fn(wst, await this.userData(wst));
       const cached = await this.loadToken();
-      if (cached) {
-        try {
-          return await run(cached);
-        } catch (e) {
-          if (!isInvalidTokenError(e)) throw e;
-          this.log("info", "Webshare session expired, logging in again.");
-          await this.forgetToken();
-        }
+      const first = cached || await this.freshLogin();
+      try {
+        return await run(first);
+      } catch (e) {
+        const free = e instanceof FreeLinkError;
+        if (!free && !(cached && isInvalidTokenError(e))) throw e;
+        await this.forgetToken();
+        this.log("info", free ? "Webshare gave a free download link, logging in again." : "Webshare session expired, logging in again.");
       }
+      const second = await this.freshLogin();
+      try {
+        return await run(second);
+      } catch (e) {
+        if (e instanceof FreeLinkError) await this.forgetToken();
+        throw e;
+      }
+    }
+    async freshLogin() {
       this.log("debug", "Logging in to Webshare.");
       const wst = await this.login();
       await this.saveToken(wst);
-      return run(wst);
+      return wst;
     }
   };
-
-  // src/url.js
-  var URL_RE = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/i;
-  var PATH_ROUTE_RE = /^\/(file|folder)\/([A-Za-z0-9]+)(?:\/|$)/;
-  var FRAGMENT_ROUTE_RE = /^\/(file|folder)\/([A-Za-z0-9]+)(?:[/?&#]|$)/;
-  function isWebshareHost(host) {
-    const h = host.toLowerCase();
-    return h === "webshare.cz" || /\.webshare\.cz$/.test(h);
-  }
-  function hostOf(authority) {
-    const at = authority.lastIndexOf("@");
-    const hostPort = at >= 0 ? authority.slice(at + 1) : authority;
-    return hostPort.replace(/:\d*$/, "").replace(/\.$/, "");
-  }
-  function parseLink(url) {
-    const m = URL_RE.exec(String(url || "").trim());
-    if (!m) return null;
-    const scheme = m[1].toLowerCase();
-    if (scheme !== "http" && scheme !== "https") return null;
-    if (!isWebshareHost(hostOf(m[2]))) return null;
-    const path = m[3] || "";
-    const fragment = (m[5] || "").replace(/^#!?/, "");
-    const route = PATH_ROUTE_RE.exec(path) || FRAGMENT_ROUTE_RE.exec(fragment);
-    return route ? { type: route[1], ident: route[2] } : null;
-  }
-  function parseIdent(url) {
-    const link = parseLink(url);
-    return link && link.type === "file" ? link.ident : null;
-  }
 
   // src/resolve.js
   function userError(message) {
@@ -552,8 +581,9 @@
     return {
       username: typeof s.webshare_username === "string" ? s.webshare_username.trim() : "",
       password: typeof s.webshare_password === "string" ? s.webshare_password : "",
-      // Unset settings come through as null; HTTPS is the default.
-      forceHttps: s.force_https !== false
+      // Gopeed passes boolean settings as booleans, with the manifest default
+      // (true) until the user changes it; anything else counts as off.
+      forceHttps: s.force_https === true || s.force_https === 1 || s.force_https === "true"
     };
   }
   function describeApiError(e) {
@@ -570,10 +600,14 @@
     const g = globalThis.gopeed;
     const logger = g.logger;
     const url = ctx && ctx.req && ctx.req.url || "";
-    const ident = parseIdent(url);
-    if (!ident) {
+    const parsed = parseLink(url);
+    if (parsed && parsed.type === "folder") {
+      throw userError("Webshare folder links are not supported yet. Open a file in the folder and copy its address (https://webshare.cz/#/file/...).");
+    }
+    if (!parsed) {
       throw userError("This Webshare address is not a file link. Open the file on webshare.cz and copy its address (https://webshare.cz/#/file/...).");
     }
+    const ident = parsed.ident;
     const settings = readSettings(g.settings);
     if (!settings.username || !settings.password) {
       throw userError("Webshare: set your username and password in the Webshare extension settings first.");
@@ -591,8 +625,11 @@
           throw userError("Webshare: the account " + (user.username || settings.username) + " has no active VIP. Premium downloads need VIP.");
         }
         const info = await client.fileInfo(ident, wst);
-        if (info.removed || !info.available) {
+        if (info.removed) {
           throw userError("Webshare: this file has been removed" + (info.removalReason ? " (" + info.removalReason + ")" : "") + ".");
+        }
+        if (!info.available) {
+          throw userError("Webshare: this file is not available for download right now. Try again later.");
         }
         if (info.passwordProtected) {
           throw userError("Webshare: this file is password-protected, which the extension does not support yet.");
@@ -613,12 +650,16 @@
       logger.info("Resolved Webshare file " + ident + " (" + file.size + " bytes).");
     } catch (e) {
       if (isUserError(e)) throw e;
+      if (e instanceof FreeLinkError) {
+        logger.warn("Webshare gave a free download link for " + ident + " twice, even after logging in again.");
+        throw userError("Webshare did not grant a VIP download link. Check the VIP status of your account on webshare.cz and the account in the Webshare extension settings.");
+      }
       if (e instanceof WebshareError) {
         logger.warn("Webshare error for " + ident + ": " + (e.code ? e.code + " " : "") + e.message);
         throw userError(describeApiError(e));
       }
-      logger.error("Unexpected error resolving Webshare file " + ident + ": " + (e && e.message || e));
-      throw userError("Webshare: unexpected error: " + (e && e.message || e));
+      logger.error("Unexpected error resolving Webshare file " + ident + ": " + (e && e.stack || e && e.message || e));
+      throw userError("Webshare: unexpected error. See the extension log for details.");
     }
   }
 
