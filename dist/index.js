@@ -513,7 +513,8 @@
 
   // src/url.js
   var URL_RE = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/i;
-  var FILE_ROUTE_RE = /(?:^|\/)file\/([A-Za-z0-9]+)(?:[/?&#]|$)/;
+  var PATH_ROUTE_RE = /^\/(file|folder)\/([A-Za-z0-9]+)(?:\/|$)/;
+  var FRAGMENT_ROUTE_RE = /^\/(file|folder)\/([A-Za-z0-9]+)(?:[/?&#]|$)/;
   function isWebshareHost(host) {
     const h = host.toLowerCase();
     return h === "webshare.cz" || /\.webshare\.cz$/.test(h);
@@ -521,9 +522,9 @@
   function hostOf(authority) {
     const at = authority.lastIndexOf("@");
     const hostPort = at >= 0 ? authority.slice(at + 1) : authority;
-    return hostPort.replace(/:\d*$/, "");
+    return hostPort.replace(/:\d*$/, "").replace(/\.$/, "");
   }
-  function parseIdent(url) {
+  function parseLink(url) {
     const m = URL_RE.exec(String(url || "").trim());
     if (!m) return null;
     const scheme = m[1].toLowerCase();
@@ -531,11 +532,12 @@
     if (!isWebshareHost(hostOf(m[2]))) return null;
     const path = m[3] || "";
     const fragment = (m[5] || "").replace(/^#!?/, "");
-    const fromPath = FILE_ROUTE_RE.exec(path);
-    if (fromPath) return fromPath[1];
-    const fromFragment = FILE_ROUTE_RE.exec(fragment);
-    if (fromFragment) return fromFragment[1];
-    return null;
+    const route = PATH_ROUTE_RE.exec(path) || FRAGMENT_ROUTE_RE.exec(fragment);
+    return route ? { type: route[1], ident: route[2] } : null;
+  }
+  function parseIdent(url) {
+    const link = parseLink(url);
+    return link && link.type === "file" ? link.ident : null;
   }
 
   // src/resolve.js
