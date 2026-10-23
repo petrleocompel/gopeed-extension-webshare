@@ -149,6 +149,18 @@ test('does not loop when a fresh token is rejected too', async () => {
   const message = await resolveError();
   assert.match(message, /Access denied/);
   assert.deepEqual(methods(), ['user_data', 'salt', 'login', 'user_data']);
+  // The rejected fresh token is not kept for the next resolve.
+  assert.equal(fake.storage.map.has('session'), false);
+  assertNoSecretsLeaked(message);
+});
+
+test('does not keep a fresh token that is rejected without a stored session', async () => {
+  happyRoutes([]);
+  const message = await resolveError();
+  assert.match(message, /Access denied/);
+  assert.deepEqual(methods(), ['salt', 'login', 'user_data']);
+  assert.equal(fake.storage.map.has('session'), false);
+  assertNoSecretsLeaked(message);
 });
 
 test("ignores a stored token of another account", async () => {

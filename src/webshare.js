@@ -237,7 +237,9 @@ export class WebshareClient {
   //   - fn throws a FreeLinkError, with the stored token or a fresh one.
   //
   // The token is forgotten in both cases. Any other error, and a failure of
-  // the second run, is thrown to the caller.
+  // the second run, is thrown to the caller. A token that user_data rejects
+  // or that yields a free link is always forgotten, also when it was just
+  // issued, so the next resolve does not start with it.
   async withSession(fn) {
     const run = async (wst) => fn(wst, await this.userData(wst));
 
@@ -247,8 +249,9 @@ export class WebshareClient {
       return await run(first);
     } catch (e) {
       const free = e instanceof FreeLinkError;
-      if (!free && !(cached && isInvalidTokenError(e))) throw e;
-      await this.forgetToken();
+      const rejected = isInvalidTokenError(e);
+      if (free || rejected) await this.forgetToken();
+      if (!free && !(cached && rejected)) throw e;
       this.log('info', free ? 'Webshare gave a free download link, logging in again.' : 'Webshare session expired, logging in again.');
     }
 
@@ -256,7 +259,7 @@ export class WebshareClient {
     try {
       return await run(second);
     } catch (e) {
-      if (e instanceof FreeLinkError) await this.forgetToken();
+      if (e instanceof FreeLinkError || isInvalidTokenError(e)) await this.forgetToken();
       throw e;
     }
   }
