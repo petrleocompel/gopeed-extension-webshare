@@ -1,0 +1,25 @@
+{
+  "name": "gopeed-extension-webshare",
+  "version": "0.1.0",
+  "description": "Gopeed extension: download webshare.cz files at premium speed with your Webshare VIP account.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "Petr Leo Compel",
+  "homepage": "https://github.com/petrleocompel/gopeed-extension-webshare",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/petrleocompel/gopeed-extension-webshare"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "integration": "node scripts/integration.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}
