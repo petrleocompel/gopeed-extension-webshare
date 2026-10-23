@@ -2,20 +2,17 @@
 
 A [Gopeed](https://gopeed.com) extension that downloads files from
 [webshare.cz](https://webshare.cz) at full premium speed using your own
-Webshare VIP account.
+Webshare account.
 
-Paste a Webshare file link into Gopeed, for example
+Paste a Webshare file link into Gopeed. The extension logs in to Webshare with
+your account, looks up the file's name and size, and hands Gopeed the premium
+direct download link.
 
-```
-https://webshare.cz/#/file/7e31cQ7l44/txt-txt
-```
+## Requirements
 
-and the extension logs in to Webshare with your account, looks up the file's
-name and size, and hands Gopeed the premium direct download link. These forms
-are recognised too: `https://webshare.cz/file/<ident>/<name>`,
-`https://webshare.cz/#/file/<ident>`, and the `www.` and `en.` subdomains.
-
-You need a Webshare account with active VIP.
+- Gopeed with extension support.
+- A Webshare account with **active VIP**. Accounts without VIP are refused
+  with an error rather than given slow free downloads.
 
 ## Install
 
@@ -25,65 +22,45 @@ In Gopeed, open **Extensions**, paste the repository URL and install:
 https://github.com/petrleocompel/gopeed-extension-webshare
 ```
 
-## Configure
+## Settings
 
-Open the extension's settings in Gopeed and fill in:
+| Setting | Name | |
+| --- | --- | --- |
+| Username | `webshare_username` | Your Webshare username or e-mail. |
+| Password | `webshare_password` | Your Webshare password. |
+| Use HTTPS download links | `force_https` | Asks Webshare for HTTPS links. On by default. |
 
-| Setting | |
-| --- | --- |
-| **Username** | Your Webshare username or e-mail. |
-| **Password** | Your Webshare password. |
-| **Use HTTPS download links** | On by default. |
+The password is never sent as plain text: like the Webshare website, the
+extension sends only a salted hash of it. The session token is kept in the
+extension's Gopeed storage, so later downloads do not log in again until the
+session expires.
 
-The password is never sent to Webshare as plain text: like the Webshare
-website, the extension sends only a salted hash of it. After logging in, the
-session token is kept in the extension's Gopeed storage, so later downloads do
-not log in again until the session expires.
+## Supported links
 
-When something goes wrong (wrong password, no VIP, file removed or
-password-protected), Gopeed shows the reason in its error message.
-Password-protected files are not supported yet.
+```
+https://webshare.cz/#/file/<ident>/<name>
+https://webshare.cz/#/file/<ident>
+https://webshare.cz/file/<ident>/<name>
+```
+
+The `www.` and `en.` subdomains work too. When something goes wrong (wrong
+password, no VIP, file removed or unavailable), Gopeed shows the reason in the
+task's error message.
+
+## Known limitations
+
+- Folder links (`/#/folder/...`) are not supported yet; add the files one by
+  one.
+- Password-protected files are not supported yet.
+- When several downloads are resolved at the same moment without a stored
+  session, each may log in separately. This is harmless; the last session is
+  kept.
 
 ## Development
 
-Requires Node.js 22.
-
-```sh
-npm install
-npm test              # unit tests (node:test)
-npm run build         # bundles src/ into dist/index.js
-npm run integration   # smoke test against the real Webshare API
-```
-
-`dist/index.js` is committed, because Gopeed installs the extension straight
-from the repository. Rebuild and commit it with every source change.
-
-Gopeed runs extensions in [goja](https://github.com/dop251/goja), a JavaScript
-engine without Node.js or browser APIs, so the extension carries its own MD5,
-SHA-1 and md5crypt implementations and builds request bodies by hand. The
-bundle is a single ES2017 script.
-
-### Integration test
-
-`npm run integration` reads `WEBSHARE_USERNAME` and `WEBSHARE_PASSWORD` from
-the environment or from a `.env` file in the repository root (git-ignored):
-
-```
-WEBSHARE_USERNAME=your-name
-WEBSHARE_PASSWORD=your-password
-```
-
-It logs in and prints the account name and VIP status. To also resolve a file,
-set `WEBSHARE_TEST_URL` to a Webshare file link; to list a few public files to
-test with, set `WEBSHARE_SEARCH` to a search term. It never prints the
-password, the session token or the download link.
-
-### Developer-mode install
-
-To try local changes in Gopeed desktop, open **Extensions**, click the install
-button five times to enable developer mode, then choose this repository's
-folder. Run `npm run build` after each change and reload the extension.
-Extension logs go to `logs/extension.log` in Gopeed's storage directory.
+See [docs/development.md](docs/development.md) for building, testing and the
+Gopeed runtime, and [docs/webshare-api.md](docs/webshare-api.md) for the
+Webshare API details the extension relies on.
 
 ## License
 
