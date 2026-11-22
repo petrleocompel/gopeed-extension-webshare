@@ -666,6 +666,28 @@
     }
   }
 
+  // src/start.js
+  function setUrl(req, url) {
+    if (typeof req.setUrl === "function") req.setUrl(url);
+    else req.url = url;
+  }
+  async function onStart(ctx) {
+    const meta = ctx.task.meta;
+    const req = meta.req;
+    const host = urlHost(req.url);
+    if (!host || !isWebshareHost(host)) return;
+    if (meta.res) return;
+    try {
+      const resolved = { req };
+      await onResolve(resolved);
+      setUrl(req, resolved.res.files[0].req.url);
+    } catch (e) {
+      setUrl(req, "");
+      throw e;
+    }
+  }
+
   // src/index.js
   gopeed.events.onResolve(onResolve);
+  gopeed.events.onStart(onStart);
 })();

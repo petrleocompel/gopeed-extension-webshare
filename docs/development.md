@@ -13,8 +13,9 @@ npm run integration   # smoke test against the real Webshare API
 
 ```
 manifest.json            Gopeed extension manifest (settings, URL patterns)
-src/index.js             registers the onResolve handler
+src/index.js             registers the onResolve and onStart handlers
 src/resolve.js           onResolve: URL -> ctx.res, user-facing errors
+src/start.js             onStart: resolves direct/batch task URLs before HTTP
 src/webshare.js          Webshare API client and session handling
 src/url.js               Webshare URL parsing
 src/xml.js               tiny XML tag extractor
@@ -54,6 +55,13 @@ single ES2017 IIFE with no runtime dependencies.
   `ctx.res = { name, files: [{ name, size, req: { url } }] }`. Gopeed 1.9.3
   rejects an empty `ctx.res.name`, so the file's name (or its ident) is always
   set.
+- Direct/batch creation skips `onResolve`. `onStart` receives
+  `ctx.task.meta = { req, res, ... }` before HTTP resolution. If `res` is
+  absent, the extension resolves the page and replaces `req.url` with the VIP
+  link (`req.setUrl()` on newer Gopeed). Existing resolved resources are kept.
+  Gopeed 1.9.x ignores thrown `onStart` errors, so the handler also clears the
+  page URL on failure to prevent downloading HTML. Those tasks must be added
+  again after fixing the cause; the extension log has the original error.
 - Settings arrive typed as declared in `manifest.json`, with the manifest
   `value` as the default. Secret settings are named with a `_password` (or
   `_token`) suffix so that Gopeed's UIs can mask them.
@@ -78,7 +86,10 @@ It logs in and prints the account name and VIP status.
 - `WEBSHARE_SEARCH=<term>` lists a few public files to test with.
 - `WEBSHARE_TEST_URL=<file link>` also calls `file_info` and `file_link`
   directly, then runs `onResolve` end to end, and reports the link's scheme
-  and host tier (`vip.*` / `free.*`).
+  and host tier (`vip.*` / `free.*`). Multiple URLs can be separated by
+  whitespace (including newlines). Each is also exercised through the batch
+  `onStart` path, with an HTTP HEAD check to reject HTML without downloading
+  the file body.
 
 It never prints the password, the session token or the download link.
 

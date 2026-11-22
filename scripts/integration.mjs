@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { WebshareClient } from '../src/webshare.js';
 import { parseIdent, urlHost } from '../src/url.js';
 import { onResolve } from '../src/resolve.js';
+import { onStart } from '../src/start.js';
 import { xmlBlocks, xmlText } from '../src/xml.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -84,7 +85,8 @@ if (process.env.WEBSHARE_SEARCH) {
   }
 }
 
-const testUrl = process.env.WEBSHARE_TEST_URL;
+const testUrls = (process.env.WEBSHARE_TEST_URL || '').trim().split(/\s+/).filter(Boolean);
+const testUrl = testUrls[0];
 if (testUrl) {
   const ident = parseIdent(testUrl);
   if (!ident) {
@@ -125,6 +127,24 @@ if (testUrl) {
   console.log('  res.name: ' + ctx.res.name);
   console.log('  res.files[0].size: ' + ctx.res.files[0].size);
   describeLink(ctx.res.files[0].req.url);
+
+  // Direct batch tasks have no resource yet. Exercise the same onStart
+  // path for each pasted URL, without downloading the file bodies.
+  for (const url of testUrls) {
+    const task = { meta: { req: { url }, res: null } };
+    await step('batch onStart (' + parseIdent(url) + ')', () => onStart({ task }));
+    if (task.meta.req.url === url || !/^https?:\/\//.test(task.meta.req.url)) {
+      throw new Error('Batch task did not receive a direct download link.');
+    }
+    describeLink(task.meta.req.url);
+    await step('batch file HEAD', async () => {
+      const response = await fetch(task.meta.req.url, { method: 'HEAD' });
+      if (!response.ok) throw new Error('Direct file returned HTTP ' + response.status);
+      const type = response.headers.get('content-type') || '';
+      if (/text\/html/i.test(type)) throw new Error('Direct file returned HTML.');
+      console.log('type=' + type + ', bytes=' + response.headers.get('content-length'));
+    });
+  }
 } else {
   console.log('(set WEBSHARE_TEST_URL to also resolve a file)');
 }

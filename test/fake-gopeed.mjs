@@ -76,6 +76,9 @@ export function installFakeGopeed(options = {}) {
     logger: { debug: log('debug'), info: log('info'), warn: log('warn'), error: log('error') },
     info: { identity: 'petrleocompel@webshare', version: '0.1.0' },
     events: {
+      onStart(fn) {
+        fake.hooks.onStart = fn;
+      },
       onResolve(fn) {
         fake.hooks.onResolve = fn;
       },

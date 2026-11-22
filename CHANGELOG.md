@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Batch downloads now resolve each Webshare page to its VIP file URL in
+  `onStart`; Gopeed skips `onResolve` when creating direct/batch tasks.
+- Failed batch resolution prevents an HTML download on older Gopeed versions
+  that ignore errors thrown by `onStart`.
+
 ## [0.1.0] - 2026-10-23
 
 ### Added

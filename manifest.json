@@ -16,6 +16,13 @@
         "urls": ["*://webshare.cz/*", "*://*.webshare.cz/*"]
       },
       "entry": "dist/index.js"
+    },
+    {
+      "event": "onStart",
+      "match": {
+        "urls": ["*://webshare.cz/*", "*://*.webshare.cz/*"]
+      },
+      "entry": "dist/index.js"
     }
   ],
   "settings": [

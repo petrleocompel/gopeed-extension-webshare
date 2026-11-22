@@ -8,6 +8,10 @@ Paste a Webshare file link into Gopeed. The extension logs in to Webshare with
 your account, looks up the file's name and size, and hands Gopeed the premium
 direct download link.
 
+To download several files at once, use Gopeed's batch input and paste one
+Webshare file URL per line. Each task is converted to a VIP download link
+before it starts, including tasks added without the single-link preview.
+
 ## Requirements
 
 - Gopeed with extension support.
@@ -50,8 +54,11 @@ task's error message.
 ## Known limitations
 
 - Folder links (`/#/folder/...` and `/folder/...`) are not supported yet; add
-  the files one by one.
+  individual file URLs in the batch input instead.
 - Password-protected files are not supported yet.
+- Older Gopeed versions may show a generic error for failed batch tasks;
+  check the extension log for the reason. After fixing the cause, add the
+  failed links again. The extension prevents falling back to an HTML download.
 - When several downloads are resolved at the same moment without a stored
   session, each may log in separately. This is harmless; the last session is
   kept.
