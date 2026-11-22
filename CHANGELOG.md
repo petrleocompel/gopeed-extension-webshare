@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-22
+
 ### Fixed
 
 - Batch downloads now resolve each Webshare page to its VIP file URL in
@@ -30,5 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without VIP, removed, unavailable or password-protected files, and folder
   links.
 
-[Unreleased]: https://github.com/petrleocompel/gopeed-extension-webshare/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/petrleocompel/gopeed-extension-webshare/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/petrleocompel/gopeed-extension-webshare/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/petrleocompel/gopeed-extension-webshare/releases/tag/v0.1.0
