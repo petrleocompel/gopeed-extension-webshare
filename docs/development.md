@@ -52,16 +52,24 @@ single ES2017 IIFE with no runtime dependencies.
   leaves as a `MessageError`. Unexpected errors are logged in full but shown
   with a fixed message.
 - `gopeed.events.onResolve(ctx)` reads `ctx.req.url` and sets
-  `ctx.res = { name, files: [{ name, size, req: { url } }] }`. Gopeed 1.9.3
-  rejects an empty `ctx.res.name`, so the file's name (or its ident) is always
-  set.
+  `ctx.res = { name, files: [{ name, size, req: { url } }] }`. Gopeed 1.9.x
+  rejects an empty `ctx.res.name` (2.0 no longer does), so the file's name (or
+  its ident) is always set.
 - Direct/batch creation skips `onResolve`. `onStart` receives
-  `ctx.task.meta = { req, res, ... }` before HTTP resolution. If `res` is
-  absent, the extension resolves the page and replaces `req.url` with the VIP
-  link (`req.setUrl()` on newer Gopeed). Existing resolved resources are kept.
-  Gopeed 1.9.x ignores thrown `onStart` errors, so the handler also clears the
-  page URL on failure to prevent downloading HTML. Those tasks must be added
-  again after fixing the cause; the extension log has the original error.
+  `ctx.task.meta = { req, res, ... }` before HTTP resolution, and again on
+  every later start. If `res` is absent, the extension resolves the page and
+  replaces `req.url` with the VIP link (`req.setUrl()` on Gopeed 2). Existing
+  resolved resources are kept.
+- Gopeed 1.9.x (and the 2.0 betas) ignore thrown `onStart` errors, so the
+  handler also clears the page URL on failure to prevent downloading HTML.
+  Gopeed 2.0 fails the task with the thrown `MessageError` and shows its
+  message.
+- Gopeed 2 adds `req.rawUrl`, the URL the task was created with, and matches
+  the manifest's URL patterns against it. `onStart` therefore still runs after
+  `req.url` was replaced or cleared, and resolves the page from `rawUrl`: a
+  failed task can simply be retried. On Gopeed 1.9.x it has to be added again.
+- Gopeed 2 bounds each event handler, including its network calls, to one
+  minute.
 - Settings arrive typed as declared in `manifest.json`, with the manifest
   `value` as the default. Secret settings are named with a `_password` (or
   `_token`) suffix so that Gopeed's UIs can mask them.

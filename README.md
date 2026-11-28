@@ -14,7 +14,8 @@ before it starts, including tasks added without the single-link preview.
 
 ## Requirements
 
-- Gopeed with extension support.
+- Gopeed 2.0 or newer is recommended; Gopeed 1.9 works with the limitation
+  below.
 - A Webshare account with **active VIP**. Accounts without VIP are refused
   with an error rather than given slow free downloads.
 
@@ -56,9 +57,10 @@ task's error message.
 - Folder links (`/#/folder/...` and `/folder/...`) are not supported yet; add
   individual file URLs in the batch input instead.
 - Password-protected files are not supported yet.
-- Older Gopeed versions may show a generic error for failed batch tasks;
-  check the extension log for the reason. After fixing the cause, add the
-  failed links again. The extension prevents falling back to an HTML download.
+- On Gopeed 1.9, failed batch tasks show a generic error; check the
+  extension log for the reason. After fixing the cause, add the failed links
+  again. The extension prevents falling back to an HTML download. Gopeed 2.0
+  shows the reason on the task, and the task can simply be retried.
 - When several downloads are resolved at the same moment without a stored
   session, each may log in separately. This is harmless; the last session is
   kept.

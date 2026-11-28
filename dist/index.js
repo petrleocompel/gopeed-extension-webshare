@@ -671,14 +671,23 @@
     if (typeof req.setUrl === "function") req.setUrl(url);
     else req.url = url;
   }
+  function isWebsharePage(url) {
+    const host = urlHost(url);
+    return !!host && isWebshareHost(host);
+  }
+  function pageUrl(req) {
+    if (isWebsharePage(req.url)) return req.url;
+    if (isWebsharePage(req.rawUrl)) return req.rawUrl;
+    return null;
+  }
   async function onStart(ctx) {
     const meta = ctx.task.meta;
     const req = meta.req;
-    const host = urlHost(req.url);
-    if (!host || !isWebshareHost(host)) return;
+    const url = pageUrl(req);
+    if (!url) return;
     if (meta.res) return;
     try {
-      const resolved = { req };
+      const resolved = { req: { url } };
       await onResolve(resolved);
       setUrl(req, resolved.res.files[0].req.url);
     } catch (e) {

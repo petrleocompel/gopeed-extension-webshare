@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Gopeed 2.0: a batch task that failed to resolve (for example with a wrong
+  password) can be retried after fixing the cause. The extension resolves the
+  original Webshare page again from the task's `rawUrl` instead of leaving it
+  with an empty URL.
+- Gopeed 2.0: a task restarted before its download began asks Webshare for a
+  fresh VIP link instead of reusing the old one.
+
 ## [0.1.1] - 2026-11-22
 
 ### Fixed

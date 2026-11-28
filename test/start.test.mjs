@@ -29,10 +29,18 @@ function loadStart() {
   }
 }
 
-async function start(url, res = null, modern = false) {
+// Gopeed 2 requests carry the creation URL in rawUrl and a setUrl method.
+function request(url, modern, rawUrl = url) {
   const req = { url };
-  if (modern) req.setUrl = (value) => { req.url = value; };
-  const ctx = { task: { meta: { req, res } } };
+  if (modern) {
+    req.rawUrl = rawUrl;
+    req.setUrl = (value) => { req.url = value; };
+  }
+  return req;
+}
+
+async function start(url, res = null, modern = false) {
+  const ctx = { task: { meta: { req: request(url, modern), res } } };
   if (fake.hooks.onStart) await fake.hooks.onStart(ctx);
   return ctx.task.meta;
 }
@@ -70,8 +78,7 @@ test('failed batch items cannot fall back to downloading HTML, even on older Gop
   loadStart();
   fake.settings.webshare_password = '';
   for (const modern of [false, true]) {
-    const req = { url: urls[0] };
-    if (modern) req.setUrl = (value) => { req.url = value; };
+    const req = request(urls[0], modern);
     await assert.rejects(() => fake.hooks.onStart({ task: { meta: { req, res: null } } }),
       (error) => error instanceof MessageError && /set your username and password/.test(error.message));
     assert.equal(req.url, '');
@@ -87,4 +94,41 @@ test('one unavailable batch item does not prevent the other from resolving', asy
   assert.equal(results[0].status, 'rejected');
   assert.match(results[0].reason.message, /not available/);
   assert.equal(results[1].value.req.url, 'https://vip.1.dl.wsfiles.cz/4eH6x4RviN/video.mkv');
+});
+
+test('Gopeed 2 retries a failed batch item from rawUrl after its URL was cleared', async () => {
+  loadStart();
+  fake.settings.webshare_password = '';
+  const req = request(urls[0], true);
+  const ctx = { task: { meta: { req, res: null } } };
+  await assert.rejects(() => fake.hooks.onStart(ctx), MessageError);
+  assert.equal(req.url, '');
+  assert.equal(req.rawUrl, urls[0]);
+
+  fake.settings.webshare_password = 'password';
+  await fake.hooks.onStart(ctx);
+  assert.equal(req.url, 'https://vip.1.dl.wsfiles.cz/yPYGIFQPqJ/video.mkv');
+});
+
+test('Gopeed 2 asks for a fresh VIP link when a task restarts before HTTP resolution', async () => {
+  loadStart();
+  const req = request('https://vip.1.dl.wsfiles.cz/stale/video.mkv', true, urls[1]);
+  await fake.hooks.onStart({ task: { meta: { req, res: null } } });
+  assert.equal(req.url, 'https://vip.1.dl.wsfiles.cz/4eH6x4RviN/video.mkv');
+});
+
+test('Gopeed 2 single-link tasks with a resolved resource are not resolved again', async () => {
+  loadStart();
+  const res = { name: 'video.mkv', files: [{ req: { url: 'https://vip.1.dl.wsfiles.cz/already-resolved' } }] };
+  const req = request('https://vip.1.dl.wsfiles.cz/already-resolved', true, urls[0]);
+  await fake.hooks.onStart({ task: { meta: { req, res } } });
+  assert.equal(req.url, 'https://vip.1.dl.wsfiles.cz/already-resolved');
+  assert.equal(fake.calls.length, 0);
+});
+
+test('Gopeed 2 direct tasks of other hosts are left alone', async () => {
+  loadStart();
+  const url = 'https://vip.1.dl.wsfiles.cz/video.mkv';
+  assert.equal((await start(url, null, true)).req.url, url);
+  assert.equal(fake.calls.length, 0);
 });
