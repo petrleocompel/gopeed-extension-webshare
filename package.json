@@ -1,6 +1,6 @@
 {
   "name": "gopeed-extension-webshare",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Gopeed extension: download webshare.cz files at premium speed with your Webshare VIP account.",
   "private": true,
   "type": "module",
